@@ -33,14 +33,22 @@ from io import BytesIO
 from ldap3 import Server, Connection, ALL
 
 def connect_to_sccm(address, username, password, domain, lmhash, nthash, options, appendToInv):
+    if debug_logging:
+        logging.debug(f"Attempting to connect to SCCM at {address}")
     try:
         smbClient = SMBConnection(address, options.target_ip, sess_port=int(options.port))
         if options.k is True:
+            if debug_logging:
+                logging.debug("Using Kerberos authentication")
             smbClient.kerberosLogin(username, password, domain, lmhash, nthash, options.aesKey, options.dc_ip )
         else:
+            if debug_logging:
+                logging.debug("Using standard SMB authentication")
             smbClient.login(username, password, domain, lmhash, nthash)
         try:
             def get_files_in_folder(targetfolder):
+                if debug_logging:
+                    logging.debug(f"Getting files in folder: {targetfolder}")
                 files = []
                 objects = smbClient.listPath("SCCMContentLib$", targetfolder + "\\*")
                 for i in objects:
@@ -51,6 +59,8 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                 return files
 
             def get_folders_in_folder(targetfolder):
+                if debug_logging:
+                    logging.debug(f"Getting subfolders in folder: {targetfolder}")
                 folders = []
                 objects = smbClient.listPath("SCCMContentLib$", targetfolder + "\\*")
                 for i in objects:
@@ -65,18 +75,19 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                 outfile.write(filepath)
             
             def create_inventory():
+                if debug_logging:
+                    logging.debug("Starting inventory creation")
                 if os.path.exists(inventory_file) and not appendToInv:
-                    print("[+]", inventory_file, "exists. Remove it if you want to recreate the inventory.")
+                    logging.info(f"{inventory_file} exists. Remove it if you want to recreate the inventory")
                     return
                 elif os.path.exists(inventory_file) and appendToInv:
-                    print("[+]", inventory_file, "exists. Appending to it.")
-
+                    logging.info(f"{inventory_file} exists. Appending to it")
 
                 # test connection
                 smbClient.connectTree("SCCMContentLib$")
-                print("[+] Access to SCCMContentLib on", address)
 
                 # find all files in all folders
+                logging.info(f"Accessing SCCMContentLib on {address}")
                 for folders in get_folders_in_folder("DataLib"):
                     folders = folders.split("\\SCCMContentLib$\\")[1]
                     folders = folders.strip()       # remove ending newline
@@ -96,21 +107,23 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                                     write_to_file(file)
                 if options.target_file:
                     sort_and_uniq_file(inventory_file)
-                    print("[+]", inventory_file, "created, sorted and uniqed")
+                    logging.info(f"{inventory_file} created, sorted and uniqued")
                 else: 
-                    print("[+]", inventory_file, "created")
+                    logging.info(f"{inventory_file} created")
 
             def downloadfiles():
+                if debug_logging:
+                    logging.debug("Starting file download process")
                 # download interesting file
                 inventory_file = options.cmlootdownload
                 lootpath = "CMLootOut"
                 #extensions = [".xml",".inf",".cab"]
                 extensions = options.extensions
-                print("[+] Extensions to download", extensions)
+                logging.info(f"Extensions to download {extensions}")
 
                 
                 if not os.path.exists(lootpath):
-                    print("[+] Creating", lootpath)
+                    logging.info(f"Creating {lootpath}")
                     os.makedirs(lootpath)
                 # read sccmfiles.txt and fetch hashes from file
                 downloadlist = {}
@@ -142,14 +155,18 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                         share = "\\" + "FileLib" + "\\" + hashvalue[0:4] + "\\" + hashvalue
                         wf = open(lootpath + "/" + hashvalue[0:4] + "-" + filename,'wb')
                         smbClient.getFile("SCCMContentLib$", share, wf.write)
-                        print("[+] Downloaded", hashvalue[0:4] + "-" + filename)
+                        logging.info(f"Downloaded {hashvalue[0:4]} - {filename}")
                     else:
-                        print("[+] Already downloaded", hashvalue[0:4] + "-" + downloadlist[hashvalue])
+                        logging.info(f"Already downloaded {hashvalue[0:4]} - {downloadlist[hashvalue]}")
 
             inventory_file = options.cmlootinventory
             if options.cmlootinventory:
+                if debug_logging:
+                    logging.debug(f"Creating inventory file: {inventory_file}")
                 create_inventory()
             if options.cmlootdownload:
+                if debug_logging:
+                    logging.debug(f"Downloading files from inventory: {options.cmlootdownload}")
                 downloadfiles()
 
         except Exception as e:
@@ -168,6 +185,8 @@ def find_sccm_servers(domain, username, password, ldap_port):
     """
     Finds Configuration Manager server via LDAP query and writes to file
     """
+    if debug_logging:
+        logging.debug(f"Searching for SCCM servers in domain: {domain}")
     filename = "./sccmhosts.txt"
     ldap_server = domain  
     ldap_user = username + "@" + domain
@@ -189,7 +208,7 @@ def find_sccm_servers(domain, username, password, ldap_port):
         for host in sccm_hosts:
             wf.write(host + "\n")
         wf.close()
-        print("[+] Found", len(sccm_hosts), "SCCM targets. ( Written to", filename,")\n")
+        logging.info(f"Found {len(sccm_hosts)} SCCM target(s) (Written to {filename})")
     except Exception as e:
         if logging.getLogger().level == logging.DEBUG:
             import traceback
@@ -200,6 +219,8 @@ def fqdn_to_base_dn(fqdn):
     """
     Convert a Fully Qualified Domain Name (FQDN) to a Base DN (Distinguished Name) format.
     """
+    if debug_logging:
+        logging.debug(f"Converting FQDN to Base DN: {fqdn}")
     components = fqdn.split('.')
     base_dn_components = [f"DC={component}" for component in components]
     base_dn = ','.join(base_dn_components)
@@ -209,6 +230,8 @@ def sort_and_uniq_file(file_path):
     """
     Sort the contents of a file and remove duplicates (ignoring case).
     """
+    if debug_logging:
+        logging.debug(f"Sorting and removing duplicates from file: {file_path}")
     try:
         with open(file_path, 'r') as file:
             lines = file.readlines()
@@ -269,10 +292,13 @@ def main():
 
     options = parser.parse_args()
 
+    global debug_logging
+    debug_logging = False
     if options.debug is True:
         logging.getLogger().setLevel(logging.DEBUG)
-        # Print the Library's installation path
+        logging.debug("Debug mode enabled")
         logging.debug(version.getInstallationPath())
+        debug_logging = True
     else:
         logging.getLogger().setLevel(logging.INFO)
 
@@ -298,11 +324,15 @@ def main():
         nthash = ''
 
     if options.findsccmservers:
+        if debug_logging:
+            logging.debug("Starting SCCM server discovery")
         find_sccm_servers(domain, username, password, options.ldapport)
         if not options.target_file:
             sys.exit(0)
     
     if options.target_file:
+        if debug_logging:
+            logging.debug(f"Reading targets from file: {options.target_file}")
         try:
             targets = open(options.target_file, 'r').readlines()
         except Exception as e:
@@ -310,14 +340,16 @@ def main():
                 import traceback
                 traceback.print_exc()
             logging.error(str(e))
-        print("[+] Found", len(targets), "SCCM targets in", options.target_file)
+        logging.info(f"Found {len(targets)} SCCM target(s) in {options.target_file}")
         for t in targets:
             t = t.replace("\r", "").replace("\n", "").strip()
-            print("[+] Using target", t)
+            logging.info(f"Using target {t}")
             address = t
             options.target_ip = t
             connect_to_sccm(address, username, password, domain, lmhash, nthash, options, True)
     else:
+        if debug_logging:
+            logging.debug(f"Connecting to single target: {address}")
         connect_to_sccm(address, username, password, domain, lmhash, nthash, options, False)
 
     
