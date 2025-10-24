@@ -31,6 +31,8 @@ import os
 import re
 from io import BytesIO
 from ldap3 import Server, Connection, ALL
+import time
+from datetime import datetime
 
 def connect_to_sccm(address, username, password, domain, lmhash, nthash, options, appendToInv):
     if debug_logging:
@@ -116,46 +118,60 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                     logging.debug("Starting file download process")
                 # download interesting file
                 inventory_file = options.cmlootdownload
+                # log hashes and respective file names to a file
+                current_datetime = datetime.now()
+                time_with_justin_timberlake = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+                log_file = open(f"{time_with_justin_timberlake}_hash_log.txt", "a")
+                log_hash_file = open(log_file, "a")
                 lootpath = "CMLootOut"
-                #extensions = [".xml",".inf",".cab"]
                 extensions = options.extensions
                 logging.info(f"Extensions to download {extensions}")
 
-                
                 if not os.path.exists(lootpath):
                     logging.info(f"Creating {lootpath}")
                     os.makedirs(lootpath)
+                else:
+                    logging.info(f"{lootpath} already exists, skipping")
+                    
                 # read sccmfiles.txt and fetch hashes from file
                 downloadlist = {}
                 with open(inventory_file, 'r') as fp:
                     for l_no, line in enumerate(fp):
+                        # try and exact match instead of wide match
+                        #line_ext = line.lower().split('.')[-1]
+                        #if line_ext in extension.lower()
                         for extension in extensions:
                             if extension.lower() in line.lower().split('.')[-1]:
                                 # grabbing file location
-                                share = line.split("\\SCCMContentLib$\\")[1]
-                                share = share.strip()
-                                share = "\\" + share
-                                share = share + ".INI"
+                                share = "\\" + (line.split("\\SCCMContentLib$\\")[1]).strip() + ".ini"
                                 # openfile to get Hash
                                 f = BytesIO()
-                                smbClient.getFile("SCCMContentLib$", share, f.write) #, sys.stdout.buffer.write))
-                                content = f.getvalue().decode()
-                                #regexp to extract hash
-                                hashvalue = re.search("Hash[^=]*=([A-Z0-9]+)",content)
-                                hashvalue = hashvalue.group(1)
-                                # create downloadlist tuple <filename>, <hash>
-                                filename = share.split('\\')[-1]
-                                filename = filename.strip('.INI')
-                                downloadlist[hashvalue] = filename
-                #print(downloadlist)
-
+                                try:
+                                    smbClient.getFile("SCCMContentLib$", share, f.write) #, sys.stdout.buffer.write))
+                                    content = f.getvalue().decode()
+                                    #regexp to extract hash
+                                    hashvalue = re.search("Hash[^=]*=([A-Z0-9]+)",content)
+                                    hashvalue = hashvalue.group(1)
+                                    # create downloadlist tuple <filename>, <hash>
+                                    filename = share.split('\\')[-1]
+                                    filename = filename.strip('.INI')
+                                    downloadlist[hashvalue] = filename
+                                except Exception as e:
+                                    logging.info(f"Failed to download hash file: {e}")
+                # log hashes and filenames
+                for key, value in downloadlist.items():
+                    log_hash_file.write(f"{key}: {value}\n")
+                    
                 for hashvalue in downloadlist.keys():
                     if not os.path.isfile(lootpath + "/" + hashvalue[0:4] + "-" + downloadlist[hashvalue]):
                         filename = downloadlist[hashvalue]
                         share = "\\" + "FileLib" + "\\" + hashvalue[0:4] + "\\" + hashvalue
                         wf = open(lootpath + "/" + hashvalue[0:4] + "-" + filename,'wb')
-                        smbClient.getFile("SCCMContentLib$", share, wf.write)
-                        logging.info(f"Downloaded {hashvalue[0:4]} - {filename}")
+                        try:
+                            smbClient.getFile("SCCMContentLib$", share, wf.write)
+                            logging.info(f"Downloaded {hashvalue[0:4]} - {filename}")
+                        except Exception as e:
+                            logging.info(f"Failed to download file: {e}")
                     else:
                         logging.info(f"Already downloaded {hashvalue[0:4]} - {downloadlist[hashvalue]}")
 
@@ -256,7 +272,7 @@ def main():
     group = parser.add_argument_group('cmloot')
     group.add_argument('-cmlootinventory', default="sccmfiles.txt", action='store', help='File to store all indexed filepaths found in DataLib folder. Default: sccmfiles.txt', metavar = "sccmfiles.txt")
     group.add_argument('-cmlootdownload', action='store', help='Start downloading files from inventory file. Ex: -cmlootdownload sccmfiles.txt', metavar = "sccmfiles.txt")
-    group.add_argument('-extensions', type=str, default=["XML","INI","CONFIG","PS1","VBS"], nargs='*',  help='Files to download from inventory file. Default: -extensions XML INI CONFIG')
+    group.add_argument('-extensions', type=str, default=["XML","INI","CONFIG","PS1","VBS"], nargs='*',  help='Files to download from inventory file. Default: -extensions XML INI CONFIG PS1 VBS')
 
     group = parser.add_argument_group('authentication')
 
