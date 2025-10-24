@@ -33,6 +33,7 @@ from io import BytesIO
 from ldap3 import Server, Connection, ALL
 import time
 from datetime import datetime
+import tqdm
 
 def connect_to_sccm(address, username, password, domain, lmhash, nthash, options, appendToInv):
     if debug_logging:
@@ -162,7 +163,7 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                 for key, value in downloadlist.items():
                     log_hash_file.write(f"{key}: {value}\n")
                     
-                for hashvalue in downloadlist.keys():
+                for hashvalue in tqdm(downloadlist.keys(), desc="Downloading"):
                     if not os.path.isfile(lootpath + "/" + hashvalue[0:4] + "-" + downloadlist[hashvalue]):
                         filename = downloadlist[hashvalue]
                         share = "\\" + "FileLib" + "\\" + hashvalue[0:4] + "\\" + hashvalue
