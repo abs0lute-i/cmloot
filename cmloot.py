@@ -124,7 +124,7 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                 time_with_justin_timberlake = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
                 log_file = open(f"{time_with_justin_timberlake}_hash_log.txt", "a")
                 log_hash_file = open(log_file, "a")
-                lootpath = "CMLootOut"
+                lootpath = "output_" + str(smbClient.getRemoteName())
                 extensions = options.extensions
                 logging.info(f"Extensions to download {extensions}")
 
