@@ -54,7 +54,8 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                     logging.debug(f"Getting files in folder: {targetfolder}")
                 files = []
                 objects = smbClient.listPath("SCCMContentLib$", targetfolder + "\\*")
-                for i in objects:
+                description = "Reading files from folder " + str(targetfolder)
+                for i in tqdm(objects, desc=description"):
                     if i._SharedFile__filesize != 0:
                         file = "\\\\" + address + "\\SCCMContentLib$\\" + targetfolder + "\\" + i._SharedFile__shortname.removesuffix('.INI') + "\n"
                         files.append(file)
@@ -98,6 +99,7 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                     files = get_files_in_folder(folders)
                     for file in files:
                         write_to_file(file)
+                        logging.debug(f"Adding {file} to inventory")
                     # going deeper \DataLib\*\*\<here>
                     while folders:                  # if more folders exist
                         for folder in [folders]:
@@ -108,6 +110,7 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                                 files = get_files_in_folder(folders)
                                 for file in files:
                                     write_to_file(file)
+                                    logging.debug(f"Adding {file} to inventory")
                 if options.target_file:
                     sort_and_uniq_file(inventory_file)
                     logging.info(f"{inventory_file} created, sorted and uniqued")
@@ -157,6 +160,7 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                                     filename = share.split('\\')[-1]
                                     filename = filename.strip('.INI')
                                     downloadlist[hashvalue] = filename
+                                    logging.debug(f"Hash: {hashvalue} - Filename: {filename}")
                                 except Exception as e:
                                     logging.info(f"Failed to download hash file: {e}")
                 # log hashes and filenames
