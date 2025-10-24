@@ -132,7 +132,7 @@ def connect_to_sccm(address, username, password, domain, lmhash, nthash, options
                     logging.info(f"Creating {lootpath}")
                     os.makedirs(lootpath)
                 else:
-                    logging.info(f"{lootpath} already exists, skipping")
+                    logging.info(f"{lootpath} already exists, skipping creation of directory")
                     
                 # read sccmfiles.txt and fetch hashes from file
                 downloadlist = {}
